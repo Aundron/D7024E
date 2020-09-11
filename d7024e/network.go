@@ -16,11 +16,12 @@ type Packet struct {
 }
 
 type Network struct {
-	KademliaNode Kademlia
+	KademliaNode *Kademlia
 }
 
-func NewNetwork() *Network {
+func NewNetwork(kademliaNode *Kademlia) *Network {
 	newNetwork := &Network{}
+	newNetwork.KademliaNode = kademliaNode
 
 	return newNetwork
 }

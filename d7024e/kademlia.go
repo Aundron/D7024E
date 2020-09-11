@@ -1,7 +1,13 @@
 package d7024e
 
 type Kademlia struct {
-	RoutingTable RoutingTable
+	RoutingTable *RoutingTable
+}
+
+func NewKademlia(routingTable *RoutingTable) *Kademlia {
+	kademlia := &Kademlia{}
+	kademlia.RoutingTable = routingTable
+	return kademlia
 }
 
 func (kademlia *Kademlia) LookupContact(target *Contact) {

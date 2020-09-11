@@ -44,9 +44,11 @@ func (bucket *bucket) AddContact(contact Contact, network *Network) {
 
 			// If we get no answer from our ping, we remove the least recent contact and add the new contact to the front of the list
 			if response.Type == "TIMEOUT" {
+				fmt.Println("PING timeout, replacing contact")
 				bucket.list.Remove(bucket.list.Back())
 				bucket.list.PushFront(contact)
 			} else if response.Type == "PONG" {
+				fmt.Println("PONG received, discarding new contact")
 				// If least recent node responds, move it to the front and discard new contact
 				bucket.list.Remove(bucket.list.Back())
 				bucket.list.PushFront(leastRecent)
