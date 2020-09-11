@@ -1,13 +1,6 @@
 package d7024e
 
-import (
-	"encoding/json"
-	"fmt"
-	"net"
-	"testing"
-)
-
-func TestSendPingMessage(t *testing.T) {
+/*func TestSendPingMessage(t *testing.T) {
 	mockNetwork := NewNetwork()
 	mockContact := NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:6001")
 	channel := make(chan []byte)
@@ -37,4 +30,4 @@ func TestSendPingMessage(t *testing.T) {
 	json.Unmarshal(buffer, &recPacket)
 
 	fmt.Println(recPacket)
-}
+}*/
