@@ -1,24 +1,40 @@
 package d7024e
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
 	"testing"
 )
 
 func TestSendPingMessage(t *testing.T) {
-	channel := make(chan Packet)
+	mockNetwork := NewNetwork()
+	mockContact := NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:6001")
+	channel := make(chan []byte)
 
-	mockNetwork := NewNetwork(channel)
+	go func() {
+		fmt.Println("Listening")
+		conn, err := net.ListenPacket("udp", mockContact.Address)
+		if err != nil {
+			t.Error("Error")
+		}
+		defer conn.Close()
 
-	mockContact := NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8001")
+		buffer := make([]byte, 8192)
+		size, _, err := conn.ReadFrom(buffer)
+		if err != nil {
+			t.Error("Error")
+		}
 
+		channel <- buffer[:size]
+	}()
 	go mockNetwork.SendPingMessage(&mockContact)
 
-	val := <-channel
-	fmt.Println(val.Address)
-	fmt.Println(val.Type)
-}
+	buffer := <-channel
 
-func TestListen(t *testing.T) {
-	go Listen()
+	recPacket := Packet{}
+
+	json.Unmarshal(buffer, &recPacket)
+
+	fmt.Println(recPacket)
 }
