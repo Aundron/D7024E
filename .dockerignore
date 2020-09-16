@@ -1,0 +1,4 @@
+*.sh
+*.yml
+README.md
+Dockerfile
