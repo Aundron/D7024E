@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -28,5 +29,9 @@ func TestInsertToList(t *testing.T) {
 	if !NodeList.Nodes[0].Contact.ID.Equals(mockContact2.ID) {
 		t.Error("Fail wrong order in list")
 	}
+}
 
+func TestGetIPAddress(t *testing.T) {
+	ip := GetIPAddress()
+	fmt.Println(ip)
 }

@@ -1,10 +1,15 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"net"
+)
 
 const alpha = 3
 
 type Kademlia struct {
+	id           *KademliaID
+	ip           string
 	RoutingTable *RoutingTable
 }
 
@@ -19,10 +24,13 @@ type NodeList struct {
 	Nodes []*Node
 }
 
-func NewKademlia(routingTable *RoutingTable) *Kademlia {
-	kademlia := &Kademlia{}
-	kademlia.RoutingTable = routingTable
-	return kademlia
+func NewKademlia() *Kademlia {
+	kademliaNode := &Kademlia{}
+	kademliaNode.id = NewRandomKademliaID()
+	//felhantering?
+	kademliaNode.ip = GetIPAddress()
+	kademliaNode.RoutingTable = NewRoutingTable(NewContact(kademliaNode.id, kademliaNode.ip))
+	return kademliaNode
 }
 
 func (nodeList *NodeList) InsertNode(newContact *Contact, target *KademliaID) *Node {
@@ -123,4 +131,59 @@ func (kademlia *Kademlia) LookupData(hash string) {
 
 func (kademlia *Kademlia) Store(data []byte) {
 	// TODO
+}
+
+func JoinNetwork(startNodeIP string, startNodeID *KademliaID, newNode *Kademlia, network *Network) {
+	startNode := NewContact(startNodeID, startNodeIP)
+	go network.Listen()
+	//new node insert start node into one of its k-buckets
+	newNode.RoutingTable.AddContact(startNode, network)
+
+	//TODO: newNode.LookupContact(newNode.id, )
+	//new node performs a node lookup of its own ID against the start node (the only other node it knows)
+
+	//new node refreshes all k-buckets further away than the k-bucket the start node falls in
+	//(This refresh is just a lookup of a random key that is within that k-bucket range)
+}
+
+/*func (kademlia *Kademlia) refresh() {
+
+}*/
+
+//example from: https://play.golang.org/p/BDt3qEQ_2H
+func GetIPAddress() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 {
+			continue // interface down
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue // loopback interface
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			return ""
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue // not an ipv4 address
+			}
+			return ip.String()
+		}
+	}
+	return ""
 }
