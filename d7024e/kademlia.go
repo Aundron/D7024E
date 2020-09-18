@@ -8,8 +8,8 @@ import (
 const alpha = 3
 
 type Kademlia struct {
-	id           *KademliaID
-	ip           string
+	ID           *KademliaID
+	IP           string
 	RoutingTable *RoutingTable
 }
 
@@ -24,12 +24,20 @@ type NodeList struct {
 	Nodes []*Node
 }
 
+func NewStartUpNode(id string, ip string) *Kademlia {
+	startUpNode := &Kademlia{}
+	startUpNode.ID = NewKademliaID(id)
+	startUpNode.IP = ip
+	startUpNode.RoutingTable = NewRoutingTable(NewContact(startUpNode.ID, startUpNode.IP))
+	return startUpNode
+}
+
 func NewKademlia() *Kademlia {
 	kademliaNode := &Kademlia{}
-	kademliaNode.id = NewRandomKademliaID()
+	kademliaNode.ID = NewRandomKademliaID()
 	//felhantering?
-	kademliaNode.ip = GetIPAddress()
-	kademliaNode.RoutingTable = NewRoutingTable(NewContact(kademliaNode.id, kademliaNode.ip))
+	kademliaNode.IP = GetIPAddress()
+	kademliaNode.RoutingTable = NewRoutingTable(NewContact(kademliaNode.ID, kademliaNode.IP))
 	return kademliaNode
 }
 
@@ -138,10 +146,9 @@ func JoinNetwork(startNodeIP string, startNodeID *KademliaID, newNode *Kademlia,
 	go network.Listen()
 	//new node insert start node into one of its k-buckets
 	newNode.RoutingTable.AddContact(startNode, network)
-
-	//TODO: newNode.LookupContact(newNode.id, )
+	newNodeContact := NewContact(newNode.ID, newNode.IP)
 	//new node performs a node lookup of its own ID against the start node (the only other node it knows)
-
+	newNode.LookupContact(&newNodeContact, network)
 	//new node refreshes all k-buckets further away than the k-bucket the start node falls in
 	//(This refresh is just a lookup of a random key that is within that k-bucket range)
 }

@@ -1,17 +1,24 @@
 package main
 
 import (
-	"fmt"
+	"D7024E/d7024e"
 	"os"
 )
 
 func main() {
-	if len(os.Args) > 1 {
-		fmt.Println("Bootstrap")
+	id := ""
+	ip := "172.19.0.2"
+
+	if len(os.Args) > 0 {
+		startNode := d7024e.NewStartUpNode(id, ip)
+		network := d7024e.NewNetwork(startNode)
+		go network.Listen()
 	} else {
-		fmt.Println("Normal")
+		newNode := d7024e.NewKademlia()
+		startNodeID := d7024e.NewKademliaID(id)
+		network := d7024e.NewNetwork(newNode)
+		d7024e.JoinNetwork(ip, startNodeID, newNode, network)
 	}
-	//go d7024e.Listen()
 
 	for {
 
