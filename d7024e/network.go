@@ -12,7 +12,7 @@ type Packet struct {
 	Type       string
 	Address    string
 	KademliaID *KademliaID
-	Data       string
+	Data       []byte
 }
 
 type Network struct {
@@ -42,9 +42,7 @@ func (network *Network) Listen() {
 		size, _, _ := pc.ReadFrom(buffer)
 		fmt.Println(size)
 
-		recPacket := Packet{}
-
-		json.Unmarshal(buffer[:size], &recPacket)
+		recPacket := DecodePacket(buffer[:size])
 
 		fmt.Println(recPacket)
 
@@ -57,6 +55,9 @@ func (network *Network) HandleRequest(recPacket *Packet) {
 	if recPacket.Type == "PING" {
 		network.HandlePing(recPacket)
 	}
+	if recPacket.Type == "FIND_NODE" {
+		network.HandleFindNode(recPacket)
+	}
 	// 	if ping
 	// 		HandlePing()
 	// 	if store
@@ -64,6 +65,34 @@ func (network *Network) HandleRequest(recPacket *Packet) {
 	// 	...
 	//
 	// SendResponse()
+}
+
+func (network *Network) HandleFindNode(recPacket *Packet) {
+	newContact := NewContact(recPacket.KademliaID, recPacket.Address)
+	network.KademliaNode.RoutingTable.AddContact(newContact, network)
+
+	// Get K closest nodes to target node
+	kademliaID := ""
+	json.Unmarshal(recPacket.Data, &kademliaID)
+	targetNode := NewKademliaID(kademliaID)
+	closestContacts := network.KademliaNode.RoutingTable.FindClosestContacts(targetNode, bucketSize)
+
+	byte, err := json.Marshal(closestContacts)
+	if err != nil {
+		fmt.Println("error")
+	}
+
+	b := EncodePacket("FOUND_K_NODES", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, byte)
+
+	udpAddr, _ := net.ResolveUDPAddr("udp", recPacket.Address)
+	conn, err := net.DialUDP("udp", nil, udpAddr)
+
+	if err != nil {
+		fmt.Println("error sending packet")
+	}
+
+	fmt.Println("Sending FOUND_K_NODES packet to " + recPacket.Address)
+	conn.Write(b)
 }
 
 func (network *Network) HandlePing(recPacket *Packet) {
@@ -76,7 +105,7 @@ func (network *Network) HandlePing(recPacket *Packet) {
 		Type:       "PONG",
 		Address:    network.KademliaNode.RoutingTable.me.Address,
 		KademliaID: network.KademliaNode.RoutingTable.me.ID,
-		Data:       "Test",
+		Data:       nil,
 	}
 
 	b, err := json.Marshal(pongPacket)
@@ -102,7 +131,7 @@ func (network *Network) SendPingMessage(contact *Contact) *Packet {
 		Type:       "PING",
 		Address:    network.KademliaNode.RoutingTable.me.Address,
 		KademliaID: network.KademliaNode.RoutingTable.me.ID,
-		Data:       "Test",
+		Data:       nil,
 	}
 
 	b, err := json.Marshal(packet)
@@ -136,8 +165,61 @@ func (network *Network) SendPingMessage(contact *Contact) *Packet {
 	return &recPacket
 }
 
-func (network *Network) SendFindContactMessage(contact *Contact) {
-	// TODO
+func (network *Network) SendFindContactMessage(node *Node, target *KademliaID, nodeList *NodeList) *Packet {
+
+	targetByte, err := json.Marshal(target)
+	if err != nil {
+		fmt.Println("error")
+	}
+
+	b := EncodePacket("NODE_LOOKUP", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, targetByte)
+
+	udpAddr, _ := net.ResolveUDPAddr("udp", node.Contact.Address)
+	conn, err := net.DialUDP("udp", nil, udpAddr)
+	conn.SetDeadline(time.Now().Add(100 * time.Millisecond))
+	// Send encoded packet to contact
+
+	if err != nil {
+		fmt.Println("error sending packet")
+	}
+	fmt.Println("Sending NODE_LOOKUP packet to " + node.Contact.Address)
+	conn.Write(b)
+
+	// Wait for response
+	buffer := make([]byte, 8192)
+	recPacket := Packet{}
+	size, err := conn.Read(buffer)
+	if err != nil {
+		recPacket.Type = "TIMEOUT"
+		node.TimedOut = true
+	} else {
+		node.Visited = true
+		json.Unmarshal(buffer[:size], &recPacket)
+	}
+
+	// Return response
+	return &recPacket
+
+}
+
+func DecodePacket(recByte []byte) Packet {
+	recPacket := Packet{}
+	json.Unmarshal(recByte, &recPacket)
+	return recPacket
+}
+
+func EncodePacket(packetType string, address string, kademliaID *KademliaID, data []byte) []byte {
+	packet := Packet{
+		Type:       packetType,
+		Address:    address,
+		KademliaID: kademliaID,
+		Data:       data,
+	}
+	b, err := json.Marshal(packet)
+	if err != nil {
+		fmt.Println("error")
+	}
+	return b
 }
 
 func (network *Network) SendFindDataMessage(hash string) {
