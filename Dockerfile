@@ -12,6 +12,5 @@ FROM golang:latest
 #
 # $ docker build . -t kadlab
 
-COPY . /go/src/d7024e
 WORKDIR /go/src/d7024e
-CMD ["go", "run", "main.go"]
+CMD ./init.sh

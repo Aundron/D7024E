@@ -10,6 +10,9 @@ services:
 
   startupNode:
     image: kademlia:latest
+    volumes:
+      - ./d7024e/:/go/src/d7024e/d7024e/
+      - ./init/bootstrap/:/go/src/d7024e/
     stdin_open: true
     tty: true
     networks:
@@ -19,6 +22,9 @@ services:
 
   kademliaNodes:
     image: kademlia:latest # Make sure your Docker image has this name.
+    volumes:
+      - ./d7024e/:/go/src/d7024e/d7024e/
+      - ./init/kademlia/:/go/src/d7024e/
     stdin_open: true
     tty: true
     networks:
