@@ -1,3 +1,5 @@
 #!/bin/bash
 
-go run ./d7024e/main.go
+go build -o ./kademlia ./d7024e/
+sleep 1
+./kademlia
