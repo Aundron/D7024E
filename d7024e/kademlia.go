@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
+	"sync"
 )
 
 const alpha = 3
@@ -17,11 +19,12 @@ type Node struct {
 	Contact          *Contact
 	DistanceToTarget *KademliaID
 	Visited          bool
-	TimedOut         bool
+	Sent             bool
 }
 
 type NodeList struct {
 	Nodes []*Node
+	mux   sync.Mutex
 }
 
 func NewStartUpNode(id string, ip string) *Kademlia {
@@ -41,28 +44,36 @@ func NewKademlia() *Kademlia {
 	return kademliaNode
 }
 
-func (nodeList *NodeList) InsertNode(newContact *Contact, target *KademliaID) *Node {
+func (nodeList *NodeList) InsertNode(newContact Contact, target *KademliaID) *Node {
+	// Never insert yourself into the nodeList
+	nodeList.mux.Lock()
+	defer nodeList.mux.Unlock()
+	if newContact.Address == GetIPAddress() {
+		return nil
+	}
+
 	distance := newContact.ID.CalcDistance(target)
 	NewNode := &Node{
-		Contact:          newContact,
+		Contact:          &newContact,
 		DistanceToTarget: distance,
 		Visited:          false,
-		TimedOut:         false,
+		Sent:             false,
 	}
 
 	for i, elem := range (*nodeList).Nodes {
 		if newContact.ID.Equals(elem.Contact.ID) {
+			fmt.Println("Found same object in nodeList, skipping")
 			return nil
 		}
 		if NewNode.DistanceToTarget.Less(elem.DistanceToTarget) {
-			fst := (*nodeList).Nodes[:i]
-			lst := (*nodeList).Nodes[i:]
-			mid := []*Node{NewNode}
-			(*nodeList).Nodes = append(append(fst, mid...), lst...)
+			// "Simple" and "logical" from: https://stackoverflow.com/questions/46128016/insert-a-value-in-a-slice-at-a-given-index
+			nodeList.Nodes = append(nodeList.Nodes, &Node{})
+			copy(nodeList.Nodes[i+1:], nodeList.Nodes[i:])
+			nodeList.Nodes[i] = NewNode
 			return NewNode
 		}
 	}
-	(*nodeList).Nodes = []*Node{NewNode}
+	(*nodeList).Nodes = append((*nodeList).Nodes, NewNode)
 	return NewNode
 }
 
@@ -70,11 +81,13 @@ func (kademlia *Kademlia) LookupContact(target *Contact, network *Network) {
 	NodeList := NodeList{}
 
 	closestContacts := kademlia.RoutingTable.FindClosestContacts(target.ID, bucketSize)
+	fmt.Print("LookupContact: Closest contacts: ")
+	fmt.Println(closestContacts)
 
 	channel := make(chan *Packet, alpha)
 
 	for i := range closestContacts {
-		NodeList.InsertNode(&closestContacts[i], target.ID)
+		NodeList.InsertNode(closestContacts[i], target.ID)
 	}
 
 	kademlia.LookupContactRec(target, network, &NodeList, &channel)
@@ -82,34 +95,45 @@ func (kademlia *Kademlia) LookupContact(target *Contact, network *Network) {
 }
 
 func (kademlia *Kademlia) LookupContactRec(target *Contact, network *Network, nodeList *NodeList, channel *(chan *Packet)) {
+	fmt.Println("Nodelist before sending: ")
+	for _, elem := range nodeList.Nodes {
+		fmt.Println(elem)
+	}
 	AlphaUnvisited := nodeList.GetAlphaUnvisited()
-	for _, elem := range AlphaUnvisited {
-		go func() {
-			*channel <- network.SendFindContactMessage(elem, target.ID, nodeList)
-		}()
+	fmt.Println("AlphaUnvisited:")
+	for i := range AlphaUnvisited {
+		fmt.Println(AlphaUnvisited[i])
+		go func(i int) {
+			*channel <- network.SendFindContactMessage(AlphaUnvisited[i], target.ID)
+
+		}(i)
 	}
 
-	for !nodeList.CheckIfDone() {
+	for range AlphaUnvisited {
 		packet := <-*channel
 
 		if packet.Type == "FOUND_K_NODES" {
 			contactList := []Contact{}
 			json.Unmarshal(packet.Data, &contactList)
-			for j, elem := range contactList {
-				newContact := NewContact(contactList[j].ID, contactList[j].Address)
+			fmt.Println(contactList)
+			for _, elem := range contactList {
+				newContact := NewContact(elem.ID, elem.Address)
 				network.KademliaNode.RoutingTable.AddContact(newContact, network)
-				nodeList.InsertNode(&elem, target.ID)
+				nodeList.InsertNode(elem, target.ID)
 			}
-			go kademlia.LookupContactRec(target, network, nodeList, channel)
 		}
 
+		if !nodeList.CheckIfDone() {
+			go kademlia.LookupContactRec(target, network, nodeList, channel)
+		}
 	}
+
 }
 
 func (nodeList *NodeList) GetAlphaUnvisited() []*Node {
 	UnvisitedNodes := []*Node{}
 	for _, elem := range nodeList.Nodes {
-		if elem.Visited == false && elem.TimedOut == false {
+		if elem.Visited == false && elem.Sent == false {
 			UnvisitedNodes = append(UnvisitedNodes, elem)
 			if len(UnvisitedNodes) == alpha {
 				break
@@ -123,13 +147,15 @@ func (nodeList *NodeList) CheckIfDone() bool {
 	count := 0
 	for _, elem := range nodeList.Nodes {
 		if count >= bucketSize {
+			fmt.Println("DONE!")
 			return true
-		} else if elem.Visited == false && elem.TimedOut == false {
+		} else if elem.Visited == false && elem.Sent == false {
 			return false
-		} else if elem.Visited == true && elem.TimedOut == false {
+		} else if elem.Visited == true {
 			count++
 		}
 	}
+	fmt.Println("DONE!")
 	return true
 }
 
@@ -143,7 +169,6 @@ func (kademlia *Kademlia) Store(data []byte) {
 
 func JoinNetwork(startNodeIP string, startNodeID *KademliaID, newNode *Kademlia, network *Network) {
 	startNode := NewContact(startNodeID, startNodeIP)
-	go network.Listen()
 	//new node insert start node into one of its k-buckets
 	newNode.RoutingTable.AddContact(startNode, network)
 	newNodeContact := NewContact(newNode.ID, newNode.IP)

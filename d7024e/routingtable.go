@@ -1,5 +1,7 @@
 package main
 
+import "sync"
+
 const bucketSize = 20
 
 // RoutingTable definition
@@ -7,6 +9,7 @@ const bucketSize = 20
 type RoutingTable struct {
 	me      Contact
 	buckets [IDLength * 8]*bucket
+	mux     sync.Mutex
 }
 
 // NewRoutingTable returns a new instance of a RoutingTable
@@ -21,6 +24,8 @@ func NewRoutingTable(me Contact) *RoutingTable {
 
 // AddContact add a new contact to the correct Bucket
 func (routingTable *RoutingTable) AddContact(contact Contact, network *Network) {
+	routingTable.mux.Lock()
+	defer routingTable.mux.Unlock()
 	bucketIndex := routingTable.getBucketIndex(contact.ID)
 	bucket := routingTable.buckets[bucketIndex]
 	bucket.AddContact(contact, network)

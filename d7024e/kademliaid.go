@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"math/rand"
+	"time"
 )
 
 // the static number of bytes in a KademliaID
@@ -24,11 +25,14 @@ func NewKademliaID(data string) *KademliaID {
 }
 
 // NewRandomKademliaID returns a new instance of a random KademliaID,
-// change this to a better version if you like
+// The original wasn't truly random, created a new one
+// Help from https://gobyexample.com/random-numbers
 func NewRandomKademliaID() *KademliaID {
+	seed := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(seed)
 	newKademliaID := KademliaID{}
 	for i := 0; i < IDLength; i++ {
-		newKademliaID[i] = uint8(rand.Intn(256))
+		newKademliaID[i] = uint8(r.Intn(256))
 	}
 	return &newKademliaID
 }
