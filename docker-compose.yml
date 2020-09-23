@@ -34,9 +34,7 @@ services:
       
 networks:
   kademlia_network:
-    driver: bridge
     ipam:
-      driver: default
       config:
         - subnet: 172.19.0.0/24
 
