@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 func main() {
@@ -16,6 +17,10 @@ func main() {
 		fmt.Println(startNode.IP)
 		network := NewNetwork(startNode)
 		go network.Listen()
+		time.Sleep(25 * time.Second)
+		key := startNode.Store("hej", network)
+		time.Sleep(5 * time.Second)
+		fmt.Println("Found Data: " + startNode.FindValue(key, network))
 	} else {
 		newNode := NewKademlia()
 		fmt.Println("KademliaID: " + newNode.ID.String())
