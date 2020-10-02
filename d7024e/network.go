@@ -16,6 +16,11 @@ type Packet struct {
 	Data       []byte
 }
 
+type Data struct {
+	Key   *KademliaID
+	Value []byte
+}
+
 type Network struct {
 	KademliaNode *Kademlia
 }
@@ -53,6 +58,9 @@ func (network *Network) Listen() {
 }
 
 func (network *Network) HandleRequest(recPacket *Packet, conn *net.UDPConn, rAddr *net.UDPAddr) {
+	// Update routingtable
+	newContact := NewContact(recPacket.KademliaID, recPacket.Address)
+	network.KademliaNode.RoutingTable.AddContact(newContact, network)
 
 	if recPacket.Type == "PING" {
 		network.HandlePing(recPacket, conn, rAddr)
@@ -60,20 +68,16 @@ func (network *Network) HandleRequest(recPacket *Packet, conn *net.UDPConn, rAdd
 	if recPacket.Type == "FIND_NODE" {
 		network.HandleFindNode(recPacket, conn, rAddr)
 	}
-	// 	if ping
-	// 		HandlePing()
-	// 	if store
-	// 		HandleStore()
-	// 	...
-	//
-	// SendResponse()
+	if recPacket.Type == "STORE" {
+		network.HandleStore(recPacket)
+	}
+	if recPacket.Type == "FIND_DATA" {
+		network.HandleFindData(recPacket, conn, rAddr)
+	}
 }
 
 func (network *Network) HandleFindNode(recPacket *Packet, conn *net.UDPConn, rAddr *net.UDPAddr) {
 	fmt.Println("Received FIND_NODE packet from ID: " + recPacket.KademliaID.String() + ", IP: " + recPacket.Address)
-
-	newContact := NewContact(recPacket.KademliaID, recPacket.Address)
-	network.KademliaNode.RoutingTable.AddContact(newContact, network)
 
 	// Get K closest nodes to target node
 	kademliaID := ""
@@ -101,10 +105,6 @@ func (network *Network) HandleFindNode(recPacket *Packet, conn *net.UDPConn, rAd
 func (network *Network) HandlePing(recPacket *Packet, conn *net.UDPConn, rAddr *net.UDPAddr) {
 	fmt.Println("Received PING packet from ID: " + recPacket.KademliaID.String() + ", IP: " + recPacket.Address)
 
-	// TODO: Update routing tables
-	newContact := NewContact(recPacket.KademliaID, recPacket.Address)
-	network.KademliaNode.RoutingTable.AddContact(newContact, network)
-
 	b := EncodePacket("PONG", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, nil)
 
 	fmt.Println("Sending PONG packet to " + recPacket.Address)
@@ -112,6 +112,65 @@ func (network *Network) HandlePing(recPacket *Packet, conn *net.UDPConn, rAddr *
 	if err != nil {
 		fmt.Println("Error writing PONG packet")
 		log.Fatal(err)
+	}
+}
+
+func (network *Network) HandleStore(recPacket *Packet) {
+	fmt.Println("Received STORE packet from ID: " + recPacket.KademliaID.String() + ", IP: " + recPacket.Address)
+
+	data := &Data{}
+	json.Unmarshal(recPacket.Data, data)
+
+	// Insert the data in our storage
+	network.KademliaNode.Storage = append(network.KademliaNode.Storage, data)
+	fmt.Println("Saved string: '" + string(data.Value) + "' in storage")
+}
+
+func (network *Network) HandleFindData(recPacket *Packet, conn *net.UDPConn, rAddr *net.UDPAddr) {
+	fmt.Println("Received FIND_DATA packet from ID: " + recPacket.KademliaID.String() + ", IP: " + recPacket.Address)
+
+	key := ""
+	json.Unmarshal(recPacket.Data, &key)
+	fmt.Println("DATA KEY: " + key)
+
+	data := network.KademliaNode.SearchStorage(key)
+
+	if data != nil {
+		dataByte, err := json.Marshal(data)
+		if err != nil {
+			fmt.Println("HandleStore: Error marshaling data")
+		}
+
+		b := EncodePacket("FOUND_DATA", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, dataByte)
+
+		fmt.Println("Sending FOUND_DATA packet to " + recPacket.Address)
+		_, err = conn.WriteToUDP(b, rAddr)
+		if err != nil {
+			fmt.Println("Error writing FOUND_DATA packet")
+			log.Fatal(err.Error())
+		}
+	} else {
+		// Get K closest nodes to target node
+		kademliaID := ""
+		json.Unmarshal(recPacket.Data, &kademliaID)
+
+		keyNode := NewKademliaID(kademliaID)
+		closestContacts := network.KademliaNode.RoutingTable.FindClosestContacts(keyNode, bucketSize)
+
+		byte, err := json.Marshal(closestContacts)
+		if err != nil {
+			fmt.Println("HandleFindData: error marshaling closestContacts")
+			log.Fatal(err)
+		}
+
+		b := EncodePacket("FOUND_K_NODES_DATA", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, byte)
+
+		fmt.Println("Sending FOUND_K_NODES_DATA packet to " + recPacket.Address)
+		_, err = conn.WriteToUDP(b, rAddr)
+		if err != nil {
+			fmt.Println("Error writing FOUND_K_NODES_DATA packet")
+			log.Fatal(err.Error())
+		}
 	}
 }
 
@@ -226,10 +285,83 @@ func EncodePacket(packetType string, address string, kademliaID *KademliaID, dat
 	return b
 }
 
-func (network *Network) SendFindDataMessage(hash string) {
-	// TODO
+func (network *Network) SendFindDataMessage(node *Node, key *KademliaID) *Packet {
+	node.Sent = true
+	keyByte, err := json.Marshal(key.String())
+	if err != nil {
+		fmt.Println("SendFindDataMessage: Error marshaling data")
+	}
+
+	b := EncodePacket("FIND_DATA", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, keyByte)
+
+	udpAddr, err := net.ResolveUDPAddr("udp", node.Contact.Address+":67")
+	if err != nil {
+		fmt.Println("SendFindDataMessage: ResolveUDPAddr error, failed to resolve address: " + node.Contact.Address)
+	}
+	conn, err := net.DialUDP("udp", nil, udpAddr)
+	if err != nil {
+		fmt.Println("SendFindDataMessage: DialUDP error, failed dialing " + udpAddr.IP.String() + ":" + strconv.Itoa(udpAddr.Port))
+	}
+	conn.SetDeadline(time.Now().Add(100 * time.Millisecond))
+	defer conn.Close()
+	// Send encoded packet to contact
+
+	if err != nil {
+		fmt.Println("SendFindDataMessage: error sending packet")
+	}
+	fmt.Println("Sending FIND_DATA packet to " + node.Contact.Address + " with key " + key.String())
+	_, err = conn.Write(b)
+	if err != nil {
+		fmt.Println("Error writing FIND_DATA packet")
+	}
+
+	// Wait for response
+	buffer := make([]byte, 8192)
+	recPacket := Packet{}
+	size, err := conn.Read(buffer)
+	if err != nil {
+		recPacket.Type = "TIMEOUT"
+		fmt.Println("FIND_DATA message to " + node.Contact.Address + " timed out!")
+	} else {
+		node.Visited = true
+		json.Unmarshal(buffer[:size], &recPacket)
+		if recPacket.Type == "FOUND_DATA" {
+			fmt.Println("Received FOUND_DATA response from " + node.Contact.Address)
+		} else {
+			fmt.Println("Received FOUND_K_NODES_DATA response from " + node.Contact.Address)
+		}
+	}
+
+	// Return response
+	return &recPacket
+
 }
 
-func (network *Network) SendStoreMessage(data []byte) {
-	// TODO
+func (network *Network) SendStoreMessage(contact *Contact, data *Data) {
+	dataByte, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("SendStoreMessage: Error marshaling data")
+	}
+
+	b := EncodePacket("STORE", network.KademliaNode.RoutingTable.me.Address, network.KademliaNode.RoutingTable.me.ID, dataByte)
+
+	udpAddr, err := net.ResolveUDPAddr("udp", contact.Address+":67")
+	if err != nil {
+		fmt.Println("SendStoreMessage: ResolveUDPAddr error, failed to resolve remote address: " + contact.Address)
+	}
+
+	conn, err := net.DialUDP("udp", nil, udpAddr)
+	if err != nil {
+		fmt.Println("SendStoreMessage: DialUDP error, failed dialing " + udpAddr.IP.String() + ":" + strconv.Itoa(udpAddr.Port))
+	}
+
+	defer conn.Close()
+	// Send encoded packet to contact
+
+	fmt.Println("Sending STORE packet to " + contact.Address)
+	_, err = conn.Write(b)
+	if err != nil {
+		fmt.Println("Error writing STORE packet")
+		fmt.Println(err)
+	}
 }
