@@ -228,7 +228,7 @@ func (kademlia *Kademlia) FindValue(hash string, network *Network) string {
 
 	key := NewKademliaID(hash)
 	data = kademlia.LookupData(key, network)
-	if data != nil {
+	if data == nil {
 		return "Data object not found."
 	}
 

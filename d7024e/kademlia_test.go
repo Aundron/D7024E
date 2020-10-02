@@ -122,3 +122,26 @@ func TestGetIPAddress(t *testing.T) {
 	ip := GetIPAddress()
 	fmt.Println(ip)
 }
+
+func TestSearchStorage(t *testing.T) {
+	id := "FFFFFFFF00000000000000000000000000000000"
+	ip := "172.19.0.2"
+	kademliaNode := NewStartUpNode(id, ip)
+	data1Id := NewRandomKademliaID()
+	data1 := &Data{
+		Key:   data1Id,
+		Value: []byte("hej"),
+	}
+	data2Id := NewRandomKademliaID()
+	data2 := &Data{
+		Key:   data2Id,
+		Value: []byte("hejdå"),
+	}
+	kademliaNode.Storage = []*Data{data1, data2}
+
+	result := kademliaNode.SearchStorage(data1Id.String())
+
+	if string(result.Value) != string(data1.Value) {
+		t.Error("SearchStorage returns wrong value")
+	}
+}
