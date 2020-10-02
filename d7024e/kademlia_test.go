@@ -145,3 +145,35 @@ func TestSearchStorage(t *testing.T) {
 		t.Error("SearchStorage returns wrong value")
 	}
 }
+
+/*func TestLookupContact(t *testing.T) {
+	kademliaNode := NewKademlia()
+	mockNetwork := NewNetwork(kademliaNode)
+
+	kademliaNode.LookupContact(NewRandomKademliaID(), mockNetwork)
+}
+
+func TestLookupData(t *testing.T) {
+	kademliaNode := NewKademlia()
+	mockNetwork := NewNetwork(kademliaNode)
+
+	kademliaNode.LookupData(NewRandomKademliaID(), mockNetwork)
+}*/
+
+func TestStoreAndFindValue(t *testing.T) {
+	kademliaNode := NewKademlia()
+	mockNetwork := NewNetwork(kademliaNode)
+	go mockNetwork.SendMessage()
+
+	kademliaNode.RoutingTable.AddContact(NewContact(NewKademliaID("1111111100000000000000000000000000000000"), "192.0.0.2"), mockNetwork)
+
+	key := kademliaNode.Store("Hejhej", mockNetwork)
+
+	kademliaNode.FindValue(key, mockNetwork)
+}
+
+/*func TestJoinNetwork(t *testing.T) {
+	kademliaNode := NewKademlia()
+	mockNetwork := NewNetwork(kademliaNode)
+	JoinNetwork("192.0.0.2", NewRandomKademliaID(), kademliaNode, mockNetwork)
+}*/

@@ -96,7 +96,6 @@ func (kademlia *Kademlia) LookupContact(target *KademliaID, network *Network) *N
 	nl := kademlia.LookupContactRec(target, network, &NodeList, &channel)
 	fmt.Println("LookupContact DONE!")
 	return nl
-
 }
 
 func (kademlia *Kademlia) LookupContactRec(target *KademliaID, network *Network, nodeList *NodeList, channel *(chan *Packet)) *NodeList {
@@ -108,9 +107,9 @@ func (kademlia *Kademlia) LookupContactRec(target *KademliaID, network *Network,
 	//fmt.Println("AlphaUnvisited:")
 	for i := range AlphaUnvisited {
 		//fmt.Println(AlphaUnvisited[i])
-		go func(i int) {
+		go func(i int, channel *(chan *Packet)) {
 			*channel <- network.SendFindContactMessage(AlphaUnvisited[i], target)
-		}(i)
+		}(i, channel)
 	}
 
 	for range AlphaUnvisited {
@@ -161,9 +160,9 @@ func (kademlia *Kademlia) LookupDataRec(target *KademliaID, network *Network, no
 	//fmt.Println("AlphaUnvisited:")
 	for i := range AlphaUnvisited {
 		//fmt.Println(AlphaUnvisited[i])
-		go func(i int) {
+		go func(i int, channel *(chan *Packet)) {
 			*channel <- network.SendFindDataMessage(AlphaUnvisited[i], target)
-		}(i)
+		}(i, channel)
 	}
 
 	for range AlphaUnvisited {
@@ -183,12 +182,12 @@ func (kademlia *Kademlia) LookupDataRec(target *KademliaID, network *Network, no
 			json.Unmarshal(packet.Data, data)
 			return data
 		}
-
-		if !nodeList.CheckIfDone() {
-			kademlia.LookupDataRec(target, network, nodeList, channel)
-		}
-
 	}
+
+	if !nodeList.CheckIfDone() {
+		return kademlia.LookupDataRec(target, network, nodeList, channel)
+	}
+
 	return nil
 }
 
@@ -271,10 +270,6 @@ func JoinNetwork(startNodeIP string, startNodeID *KademliaID, newNode *Kademlia,
 	//new node refreshes all k-buckets further away than the k-bucket the start node falls in
 	//(This refresh is just a lookup of a random key that is within that k-bucket range)
 }
-
-/*func (kademlia *Kademlia) refresh() {
-
-}*/
 
 //example from: https://play.golang.org/p/BDt3qEQ_2H
 func GetIPAddress() string {

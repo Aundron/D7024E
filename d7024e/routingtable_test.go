@@ -32,7 +32,8 @@ func TestFullKBucket(t *testing.T) {
 	network := NewNetwork(kademliaNode)
 	rt := kademliaNode.RoutingTable
 
-	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost"), network)
+	go network.SendMessage()
+
 	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000001"), "localhost"), network)
 	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000002"), "localhost"), network)
 	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000003"), "localhost"), network)
@@ -52,6 +53,7 @@ func TestFullKBucket(t *testing.T) {
 	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000012"), "localhost"), network)
 	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000013"), "localhost"), network)
 	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000014"), "localhost"), network)
+	rt.AddContact(NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000016"), "localhost"), network)
 
 	contacts := rt.FindClosestContacts(NewKademliaID("2111111400000000000000000000000000000000"), 21)
 	/*for i := range contacts {
