@@ -4,8 +4,9 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"log"
 	"net"
+	"regexp"
 	"sync"
 )
 
@@ -41,7 +42,6 @@ func NewStartUpNode(id string, ip string) *Kademlia {
 func NewKademlia() *Kademlia {
 	kademliaNode := &Kademlia{}
 	kademliaNode.ID = NewRandomKademliaID()
-	//felhantering?
 	kademliaNode.IP = GetIPAddress()
 	kademliaNode.RoutingTable = NewRoutingTable(NewContact(kademliaNode.ID, kademliaNode.IP))
 	return kademliaNode
@@ -65,7 +65,7 @@ func (nodeList *NodeList) InsertNode(newContact Contact, target *KademliaID) *No
 
 	for i, elem := range (*nodeList).Nodes {
 		if newContact.ID.Equals(elem.Contact.ID) {
-			//fmt.Println("Found same object in nodeList, skipping")
+			//log.Println("Found same object in nodeList, skipping")
 			return nil
 		}
 		if NewNode.DistanceToTarget.Less(elem.DistanceToTarget) {
@@ -81,11 +81,13 @@ func (nodeList *NodeList) InsertNode(newContact Contact, target *KademliaID) *No
 }
 
 func (kademlia *Kademlia) LookupContact(target *KademliaID, network *Network) *NodeList {
+
+	log.Println("Lookup contact")
 	NodeList := NodeList{}
 
 	closestContacts := kademlia.RoutingTable.FindClosestContacts(target, bucketSize)
-	//fmt.Print("LookupContact: Closest contacts: ")
-	//fmt.Println(closestContacts)
+	//log.Print("LookupContact: Closest contacts: ")
+	//log.Println(closestContacts)
 
 	channel := make(chan *Packet, alpha)
 
@@ -94,19 +96,19 @@ func (kademlia *Kademlia) LookupContact(target *KademliaID, network *Network) *N
 	}
 
 	nl := kademlia.LookupContactRec(target, network, &NodeList, &channel)
-	fmt.Println("LookupContact DONE!")
+	log.Println("LookupContact DONE!")
 	return nl
 }
 
 func (kademlia *Kademlia) LookupContactRec(target *KademliaID, network *Network, nodeList *NodeList, channel *(chan *Packet)) *NodeList {
-	/*fmt.Println("Nodelist before sending: ")
+	/*log.Println("Nodelist before sending: ")
 	for _, elem := range nodeList.Nodes {
-		fmt.Println(elem)
+		log.Println(elem)
 	}*/
 	AlphaUnvisited := nodeList.GetAlphaUnvisited()
-	//fmt.Println("AlphaUnvisited:")
+	//log.Println("AlphaUnvisited:")
 	for i := range AlphaUnvisited {
-		//fmt.Println(AlphaUnvisited[i])
+		//log.Println(AlphaUnvisited[i])
 		go func(i int, channel *(chan *Packet)) {
 			*channel <- network.SendFindContactMessage(AlphaUnvisited[i], target)
 		}(i, channel)
@@ -118,7 +120,7 @@ func (kademlia *Kademlia) LookupContactRec(target *KademliaID, network *Network,
 		if packet.Type == "FOUND_K_NODES" {
 			contactList := []Contact{}
 			json.Unmarshal(packet.Data, &contactList)
-			//fmt.Println(contactList)
+			//log.Println(contactList)
 			for _, elem := range contactList {
 				newContact := NewContact(elem.ID, elem.Address)
 				network.KademliaNode.RoutingTable.AddContact(newContact, network)
@@ -138,8 +140,8 @@ func (kademlia *Kademlia) LookupData(key *KademliaID, network *Network) *Data {
 	NodeList := NodeList{}
 
 	closestContacts := kademlia.RoutingTable.FindClosestContacts(key, bucketSize)
-	//fmt.Print("LookupContact: Closest contacts: ")
-	//fmt.Println(closestContacts)
+	//log.Print("LookupContact: Closest contacts: ")
+	//log.Println(closestContacts)
 
 	channel := make(chan *Packet, alpha)
 
@@ -152,14 +154,14 @@ func (kademlia *Kademlia) LookupData(key *KademliaID, network *Network) *Data {
 }
 
 func (kademlia *Kademlia) LookupDataRec(target *KademliaID, network *Network, nodeList *NodeList, channel *(chan *Packet)) *Data {
-	/*fmt.Println("Nodelist before sending: ")
+	/*log.Println("Nodelist before sending: ")
 	for _, elem := range nodeList.Nodes {
-		fmt.Println(elem)
+		log.Println(elem)
 	}*/
 	AlphaUnvisited := nodeList.GetAlphaUnvisited()
-	//fmt.Println("AlphaUnvisited:")
+	//log.Println("AlphaUnvisited:")
 	for i := range AlphaUnvisited {
-		//fmt.Println(AlphaUnvisited[i])
+		//log.Println(AlphaUnvisited[i])
 		go func(i int, channel *(chan *Packet)) {
 			*channel <- network.SendFindDataMessage(AlphaUnvisited[i], target)
 		}(i, channel)
@@ -171,7 +173,7 @@ func (kademlia *Kademlia) LookupDataRec(target *KademliaID, network *Network, no
 		if packet.Type == "FOUND_K_NODES_DATA" {
 			contactList := []Contact{}
 			json.Unmarshal(packet.Data, &contactList)
-			//fmt.Println(contactList)
+			//log.Println(contactList)
 			for _, elem := range contactList {
 				newContact := NewContact(elem.ID, elem.Address)
 				network.KademliaNode.RoutingTable.AddContact(newContact, network)
@@ -219,6 +221,10 @@ func (nodeList *NodeList) CheckIfDone() bool {
 }
 
 func (kademlia *Kademlia) FindValue(hash string, network *Network) string {
+	matched, _ := regexp.MatchString(`[0-9a-fA-F]{40}`, hash)
+	if !matched {
+		return "Invalid hash key provided"
+	}
 
 	data := kademlia.SearchStorage(hash)
 	if data != nil {
@@ -245,6 +251,7 @@ func (kademlia *Kademlia) Store(data string, network *Network) string {
 		Value: []byte(data),
 	}
 
+	log.Println(newData.Key.String())
 	// Find K closest known nodes to Key
 	nodeList := kademlia.LookupContact(newData.Key, network)
 	sentCount := 0
@@ -261,6 +268,7 @@ func (kademlia *Kademlia) Store(data string, network *Network) string {
 }
 
 func JoinNetwork(startNodeIP string, startNodeID *KademliaID, newNode *Kademlia, network *Network) {
+	log.Println("Join network")
 	startNode := NewContact(startNodeID, startNodeIP)
 	//new node insert start node into one of its k-buckets
 	newNode.RoutingTable.AddContact(startNode, network)
@@ -314,7 +322,7 @@ func (kademlia *Kademlia) SearchStorage(hash string) *Data {
 
 	for _, elem := range kademlia.Storage {
 		if elem.Key.Equals(key) {
-			fmt.Println("SearchStorage: Found data '" + string(elem.Value) + "'")
+			log.Println("SearchStorage: Found data '" + string(elem.Value) + "'")
 			return elem
 		}
 	}
